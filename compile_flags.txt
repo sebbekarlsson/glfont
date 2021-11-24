@@ -1,0 +1,7 @@
+-std=gnu99
+
+-std=gnu99
+-I./include
+-I/usr/include/freetype2
+-I/usr/include
+-I./build/_deps/cglm-src/include

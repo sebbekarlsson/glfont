@@ -1,0 +1,132 @@
+#ifndef GLFONT_H
+#define GLFONT_H
+#include <stdint.h>
+
+#ifndef FREETYPE_SRC
+#include <freetype/ftglyph.h>
+#include <freetype2/ft2build.h>
+#include FT_FREETYPE_H
+#elif FREETYPE_SRC
+include<ft2build.h>
+#include <freetype2/freetype/ftglyph.h>
+#include FT_FREETYPE_H
+#endif
+
+#include <cglm/call.h> /* for library call (this also includes cglm.h) */
+#include <cglm/cglm.h> /* for inline */
+
+typedef struct GLRAP_VECTOR2 {
+  float x;
+  float y;
+} GLVec2;
+
+typedef struct GLRAP_IVECTOR2 {
+  int x;
+  int y;
+} GLIVec2;
+
+typedef struct GLRAP_UIVECTOR2 {
+  int x;
+  int y;
+} GLUIVec2;
+
+typedef struct GLRAP_VECTOR3 {
+  float x;
+  float y;
+  float z;
+} GLVec3;
+
+typedef struct GLFONT_FAMILY_STRUCT {
+  char *name;
+  FT_Face *face;
+  FT_Library ft;
+  uint8_t *bytes;
+  uint32_t len;
+} GLFontFamily;
+
+typedef struct GLFONT_CHARACTER_STRUCT {
+  char c;
+  float width;
+  float height;
+  unsigned int advance_x;
+  int left;
+  int top;
+  unsigned int texture;
+  float font_size;
+  short em_size;
+  int descender;
+  int ascender;
+  float yoffset;
+  int zero_height;
+  int zero_width;
+  float bearing_y;
+  GLIVec2 size;
+  GLVec2 bearing;
+  GLUIVec2 advance;
+  float extra;
+  FT_GlyphSlot *glyph;
+} GLFontCharacter;
+
+typedef struct GLFONT_ATLAS_OPTIONS_STRUCT {
+  uint8_t *family_bytes;
+  uint32_t len;
+  float font_size;
+} GLFontAtlasOptions;
+
+typedef struct GLFONT_COLOR_STRUCT {
+  float r;
+  float g;
+  float b;
+  float a;
+} GLFontColor;
+
+#define GLFONT_COLOR(r, g, b, a)                                               \
+  ((GLFontColor){r, g, b, a})
+
+typedef struct GLFONT_TEXT_OPTIONS_STRUCT {
+  float font_size;
+  GLFontColor color;
+  float scale;
+  GLFontAtlasOptions atlas_options;
+  unsigned int char_horz_res;
+  unsigned int char_vert_res;
+} GLFontTextOptions;
+
+unsigned int glfont_text_options_is_equal(GLFontTextOptions a,
+                                          GLFontTextOptions b);
+
+typedef struct GLFONT_ATLAS_STRUCT {
+  unsigned int id;
+  uint32_t max_char_height;
+  GLFontCharacter **characters;
+  uint32_t nr_characters;
+  GLFontCharacter *chars[512];
+  GLFontFamily *family;
+
+  // cache
+  unsigned int VBO;
+  unsigned int EBO;
+  unsigned int initialized;
+  uint32_t nr_rendered_chars;
+  GLFontTextOptions options;
+  char *text;
+} GLFontAtlas;
+
+void glw_font_atlas_release_cache(GLFontAtlas *atlas);
+
+void glw_font_atlas_maybe_release_cache(GLFontAtlas *atlas, const char *text,
+                                        GLFontTextOptions options);
+
+GLFontAtlas *glfont_init_atlas(GLFontAtlasOptions options);
+GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options);
+
+/**
+ * Faster when dynamic = 0
+ **/
+GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
+                                        float x, float y, float z,
+                                        GLFontTextOptions options, mat4 view,
+                                        mat4 projection, unsigned int program,
+                                        unsigned int dynamic);
+
+#endif
