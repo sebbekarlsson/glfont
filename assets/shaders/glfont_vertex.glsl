@@ -11,8 +11,8 @@ uniform mat4 view;
 uniform mat4 model;
 uniform vec4 color;
 
-uniform vec3 offsets[100];
-uniform vec3 toff[100];
+uniform vec3 offsets[256];
+uniform vec3 toff[256];
 out vec3 tex_offset;
 
 

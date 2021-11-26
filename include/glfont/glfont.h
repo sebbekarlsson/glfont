@@ -67,6 +67,16 @@ typedef struct GLFONT_CHARACTER_STRUCT {
   FT_GlyphSlot *glyph;
 } GLFontCharacter;
 
+typedef struct GL_TEXT_MEASUREMENT_STRUCT {
+  float width;
+  float height;
+  float char_height;
+  float char_width;
+  int zero_height;
+  int zero_width;
+} GLTextMeasurement;
+
+
 typedef struct GLFONT_ATLAS_OPTIONS_STRUCT {
   uint8_t *family_bytes;
   uint32_t len;
@@ -88,8 +98,10 @@ typedef struct GLFONT_TEXT_OPTIONS_STRUCT {
   GLFontColor color;
   float scale;
   GLFontAtlasOptions atlas_options;
+  unsigned int depth_test;
   unsigned int char_horz_res;
   unsigned int char_vert_res;
+  unsigned int pixel_size;
 } GLFontTextOptions;
 
 unsigned int glfont_text_options_is_equal(GLFontTextOptions a,
@@ -112,9 +124,9 @@ typedef struct GLFONT_ATLAS_STRUCT {
   char *text;
 } GLFontAtlas;
 
-void glw_font_atlas_release_cache(GLFontAtlas *atlas);
+void glfont_font_atlas_release_cache(GLFontAtlas *atlas);
 
-void glw_font_atlas_maybe_release_cache(GLFontAtlas *atlas, const char *text,
+void glfont_font_atlas_maybe_release_cache(GLFontAtlas *atlas, const char *text,
                                         GLFontTextOptions options);
 
 GLFontAtlas *glfont_init_atlas(GLFontAtlasOptions options);
@@ -128,5 +140,17 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
                                         GLFontTextOptions options, mat4 view,
                                         mat4 projection, unsigned int program,
                                         unsigned int dynamic);
+GLTextMeasurement *glfont_copy_text_measurement(GLTextMeasurement *measurement);
 
+GLTextMeasurement glfont_get_text_measurement(GLFontCharacter** characters, uint32_t len);
+
+float glfont_get_text_max_height(GLFontCharacter** characters, uint32_t len);
+
+GLFontFamily *glfont_init_font_family(uint8_t *bytes, uint32_t len);
+
+void glfont_font_family_free(GLFontFamily *family);
+
+void glfont_load_font_character(GLFontCharacter *character,
+                                GLFontFamily *family, char c, float font_size,
+                                unsigned int horz_res, unsigned int vert_res, unsigned int pixel_size);
 #endif
