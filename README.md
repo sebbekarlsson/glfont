@@ -56,5 +56,9 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
                                         GLFontTextOptions options, mat4 view,
                                         mat4 projection, unsigned int program,
                                         unsigned int dynamic);
+                                        
+                                        
+// the file you should include
+#include <glfont/glfont.h>
 ```
 
