@@ -44,6 +44,12 @@
   The recommended use here is to pass in `0` to the `atlas` argument.
   This function will then create one for you and return it.
   Then it's up to you to free it.
+  
+  
+  When the `dynamic` parameter is set to 1,
+  then this function will automatically re-generate buffers for you
+  when the text changes.
+  Passing `0` to the `dynamic` parameter makes things faster however.
 **/
 GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
                                         float x, float y, float z,
