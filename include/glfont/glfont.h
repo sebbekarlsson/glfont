@@ -15,6 +15,7 @@ include<ft2build.h>
 #include <cglm/call.h> /* for library call (this also includes cglm.h) */
 #include <cglm/cglm.h> /* for inline */
 
+
 typedef struct GLRAP_VECTOR2 {
   float x;
   float y;
@@ -99,6 +100,8 @@ typedef struct GLFONT_TEXT_OPTIONS_STRUCT {
   float scale;
   GLFontAtlasOptions atlas_options;
   unsigned int depth_test;
+  uint32_t line_width;
+  uint32_t letter_spacing;
   unsigned int char_horz_res;
   unsigned int char_vert_res;
   unsigned int pixel_size;
@@ -122,6 +125,8 @@ typedef struct GLFONT_ATLAS_STRUCT {
   uint32_t nr_rendered_chars;
   GLFontTextOptions options;
   char *text;
+  char** text_chunks;
+  uint32_t text_chunks_len;
 } GLFontAtlas;
 
 void glfont_font_atlas_release_cache(GLFontAtlas *atlas);

@@ -8,12 +8,14 @@
 #include <GL/glew.h>
 #include <glfont/glfont.h>
 #include <glfont/macros.h>
+#include <glfont/string_utils.h>
 #include <math.h>
 
 #define WRAPS GL_CLAMP_TO_BORDER
 #define FT_FLAGS FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL
 
 #define FIRST_CHAR 32
+#define STRING_BUFFER_CAP 256
 
 static const char *getErrorMessage(FT_Error err) {
 #undef FTERRORS_H_
@@ -183,10 +185,10 @@ GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options) {
     FT_Get_Glyph(face->glyph, &glyph2);
     FT_Glyph_Get_CBox(glyph2, FT_GLYPH_BBOX_UNSCALED, &bbox);
 
-    int gw = (glyph->metrics.width / px) +
+    int gw = ceil(glyph->metrics.width / px) +
              glyph->bitmap_left; // face->glyph->bitmap.width;
 
-    int hh = (glyph->metrics.height / px) + glyph->bitmap_top / 4;
+    int hh = ceil(glyph->metrics.height / px) + ceil(glyph->bitmap_top / 4);
 
     if (hh > imageHeight) {
       imageHeight = hh;
@@ -301,174 +303,207 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
 
   if (!atlas->initialized) {
     atlas->nr_rendered_chars = strlen(text);
+
+    atlas->text_chunks = glfont_str_chunk(text, STRING_BUFFER_CAP, &atlas->text_chunks_len);
+
     glGenBuffers(1, &atlas->VBO);
     glGenBuffers(1, &atlas->EBO);
     atlas->initialized = 1;
   }
 
-  uint32_t textlen = atlas->nr_rendered_chars;
+  uint32_t nr_chunks = atlas->text_chunks_len;
 
-  if (textlen > 256) {
-    printf("(glfont) Error: glfont_draw_text_instanced can only draw 256 characters at once.\n%d characters was given.\n", textlen);
-    return atlas;
-  }
 
-  /** Allocate buffer memory */
+  float xi = 0;
+  float yi = 0;
 
-  glBindBuffer(GL_ARRAY_BUFFER, atlas->VBO);
-  glBufferData(GL_ARRAY_BUFFER, 9 * 4 * textlen * sizeof(float), 0,
-               GL_STATIC_DRAW);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas->EBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * textlen * sizeof(float), 0,
-               GL_STATIC_DRAW);
+  uint32_t current_line_width = 0;
 
-  uint32_t array_offset = 0;
-  uint32_t element_offset = 0;
-  glBindTexture(GL_TEXTURE_3D, atlas->id);
+  for (uint32_t ci = 0; ci < nr_chunks; ci++) {
 
-  int buffered = 0;
+    char* chunk = atlas->text_chunks[ci];
+    uint32_t textlen = strlen(chunk);//atlas->nr_rendered_chars;
 
-  int imageWidth = 0;
-  int maxAscent = 0;
-  for (unsigned int c = FIRST_CHAR; c < 128; c++) {
-    GLFontCharacter *ch = (GLFontCharacter *)atlas->chars[(int)c];
+    //if (textlen > 256) {
+    //  printf("(glfont) Error: glfont_draw_text_instanced can only draw 256 characters at once.\n%d characters was given.\n", textlen);
+    //  return atlas;
+    //}
 
-    FT_GlyphSlot glyph = *ch->glyph;
-    if (glyph->bitmap_top > (int)maxAscent) {
-      maxAscent = glyph->bitmap_top;
+    /** Allocate buffer memory */
+
+    glBindBuffer(GL_ARRAY_BUFFER, atlas->VBO);
+    glBufferData(GL_ARRAY_BUFFER, 9 * 4 * textlen * sizeof(float), 0,
+                GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas->EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * textlen * sizeof(float), 0,
+                GL_STATIC_DRAW);
+
+    uint32_t array_offset = 0;
+    uint32_t element_offset = 0;
+    glBindTexture(GL_TEXTURE_3D, atlas->id);
+
+    int buffered = 0;
+
+    int imageWidth = 0;
+    int maxAscent = 0;
+    for (unsigned int c = FIRST_CHAR; c < 128; c++) {
+      GLFontCharacter *ch = (GLFontCharacter *)atlas->chars[(int)c];
+
+      FT_GlyphSlot glyph = *ch->glyph;
+      if (glyph->bitmap_top > (int)maxAscent) {
+        maxAscent = glyph->bitmap_top;
+      }
     }
-  }
 
-  int i = 0;
-  char c = 0;
-  for (i = 0; i < textlen; i++) {
-    char c = text[i];
+    int i = 0;
+    char c = 0;
+    float xpos = 0;
+    float ypos = 0;
+    for (i = 0; i < textlen; i++) {
+      char c = chunk[i];
 
-    if (c == '\n') {
-      extra_y += options.font_size;
-      rx = 0;
-    }
 
-    GLFontCharacter *ch = (GLFontCharacter *)atlas->chars[(int)c];
-    if (ch == 0 && i < textlen) {
-      continue;
-    };
-
-    FT_GlyphSlot glyph = *ch->glyph;
-
-    FT_Glyph glyphK;
-    FT_Get_Glyph(glyph, &glyphK);
-    FT_BBox bbox;
-    FT_Glyph_Get_CBox(glyphK, FT_GLYPH_BBOX_GRIDFIT, &bbox);
-
-    float width = glyph->metrics.width / OR(options.pixel_size, 64);   // size
-    float height = glyph->metrics.height / OR(options.pixel_size, 64); // size
-
-    float ypos = extra_y;
-
-    int w = ch->size.x * scale;
-    int h = ch->size.y * scale;
-    float xpos = (rx + ch->bearing.x);
-
-    if (ch->c != '\r' && ch->c != '\n') {
-
-      int f = (int)ceil(options.font_size);
-
-      float scalar_z = 1.0f / (float)128 - FIRST_CHAR;
-      float stack_index = (float)((double)c - FIRST_CHAR) * scalar_z;
-      float sx = (1.0f / w);
-
-      GLFontColor color = options.color;
-
-      /**  Buffer quad */
-      {
-        if (width <= 0 || height <= 0 || program == 0)
-          continue;
-
-        glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE,
-                           *view);
-        glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1,
-                           GL_FALSE, *projection);
-
-        float w = width;
-        float h = height;
-        float r = color.r;
-        float g = color.g;
-        float b = color.b;
-        float a = color.a;
-        int K = 0;
-
-        float vertices[] = {0 + 0.0f, 0 + 0.0f, 0.0f, r, g, b, a, 0.0f, 0.0f,
-                            0 + w,    0 + 0.0f, 0.0f, r, g, b, a, 1.0f, 0.0f,
-                            0 + w,    0 + h,    0.0f, r, g, b, a, 1.0f, 1.0f,
-                            0 + 0.0f, 0 + h,    0.0f, r, g, b, a, 0.0f, 1.0f};
-
-        unsigned int indices[] = {0 + K, 1 + K, 3 + K, 1 + K, 2 + K, 3 + K};
-
-        glUniform4f(glGetUniformLocation(program, "color"), color.r, color.g,
-                    color.b, color.a);
-
-        glBindBuffer(GL_ARRAY_BUFFER, atlas->VBO);
-        glBufferSubData(GL_ARRAY_BUFFER, array_offset, sizeof(vertices),
-                        vertices);
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas->EBO);
-        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, element_offset,
-                        sizeof(indices), indices);
-
-        // x, y, z
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
-                              (void *)0 + array_offset);
-        glEnableVertexAttribArray(0);
-
-        // r, g, b, a
-        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
-                              (void *)(array_offset + (3 * sizeof(float))));
-        glEnableVertexAttribArray(1);
-
-        // texcoords
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
-                              (void *)(array_offset + (7 * sizeof(float))));
-        glEnableVertexAttribArray(2);
+      if (c == '\n') {
+        extra_y += options.font_size;
+//        current_line_width = 0;
+        rx = 0;
       }
 
-      buffered += 1;
 
-      char buff[256];
-      sprintf(buff, "offsets[%d]", (int)i);
-      glUniform3f(glGetUniformLocation(program, buff), ceil(xpos), ceil(ypos), 0);
+      GLFontCharacter *ch = (GLFontCharacter *)atlas->chars[(int)c];
+      if (ch == 0 && i < textlen) {
+        continue;
+      };
 
-      char buff2[256];
-      sprintf(buff2, "toff[%d]", (int)i);
-      glUniform3f(glGetUniformLocation(program, buff2), 0, 0, stack_index);
+      FT_GlyphSlot glyph = *ch->glyph;
 
-      array_offset += (9 * 4 * sizeof(float));
-      element_offset += (6 * sizeof(float));
+      FT_Glyph glyphK;
+      FT_Get_Glyph(glyph, &glyphK);
+      FT_BBox bbox;
+      FT_Glyph_Get_CBox(glyphK, FT_GLYPH_BBOX_GRIDFIT, &bbox);
+
+      float width = glyph->metrics.width / OR(options.pixel_size, 64);   // size
+      float height = glyph->metrics.height / OR(options.pixel_size, 64); // size
+
+
+      int w = ch->size.x * scale;
+      int h = ch->size.y * scale;
+
+      ypos =  extra_y;
+      xpos = (rx + ch->bearing.x);
+
+
+      if (ch->c != '\r' && ch->c != '\n') {
+
+        int f = (int)ceil(options.font_size);
+
+        float scalar_z = 1.0f / (float)128 - FIRST_CHAR;
+        float stack_index = (float)((double)c - FIRST_CHAR) * scalar_z;
+        float sx = (1.0f / w);
+
+        GLFontColor color = options.color;
+
+        /**  Buffer quad */
+        {
+          if (width <= 0 || height <= 0 || program == 0)
+            continue;
+
+          glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE,
+                            *view);
+          glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1,
+                            GL_FALSE, *projection);
+
+          float w = width;
+          float h = height;
+          float r = color.r;
+          float g = color.g;
+          float b = color.b;
+          float a = color.a;
+          int K = 0;
+
+          float vertices[] = {0 + 0.0f, 0 + 0.0f, 0.0f, r, g, b, a, 0.0f, 0.0f,
+                              0 + w,    0 + 0.0f, 0.0f, r, g, b, a, 1.0f, 0.0f,
+                              0 + w,    0 + h,    0.0f, r, g, b, a, 1.0f, 1.0f,
+                              0 + 0.0f, 0 + h,    0.0f, r, g, b, a, 0.0f, 1.0f};
+
+          unsigned int indices[] = {0 + K, 1 + K, 3 + K, 1 + K, 2 + K, 3 + K};
+
+          glUniform4f(glGetUniformLocation(program, "color"), color.r, color.g,
+                      color.b, color.a);
+
+          glBindBuffer(GL_ARRAY_BUFFER, atlas->VBO);
+          glBufferSubData(GL_ARRAY_BUFFER, array_offset, sizeof(vertices),
+                          vertices);
+
+          glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas->EBO);
+          glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, element_offset,
+                          sizeof(indices), indices);
+
+          // x, y, z
+          glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
+                                (void *)0 + array_offset);
+          glEnableVertexAttribArray(0);
+
+          // r, g, b, a
+          glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
+                                (void *)(array_offset + (3 * sizeof(float))));
+          glEnableVertexAttribArray(1);
+
+          // texcoords
+          glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
+                                (void *)(array_offset + (7 * sizeof(float))));
+          glEnableVertexAttribArray(2);
+        }
+
+        buffered += 1;
+
+        char buff[256];
+        sprintf(buff, "offsets[%d]", (int)i);
+        glUniform3f(glGetUniformLocation(program, buff), ceil(xpos), ceil(ypos), 0);
+
+        char buff2[256];
+        sprintf(buff2, "toff[%d]", (int)i);
+        glUniform3f(glGetUniformLocation(program, buff2), 0, 0, stack_index);
+
+        array_offset += (9 * 4 * sizeof(float));
+        element_offset += (6 * sizeof(float));
+        current_line_width += ch->size.x;
+      }
+
+      unsigned int overflow = options.line_width ? xpos+w  > options.line_width : 0;
+
+      if (ch->c == '\n') {
+        rx = x;
+      } else {
+        (rx += (ch->advance_x) >> 6);
+        //rx -= ch->bearing.x;
+        rx -= ch->size.x / 2;
+      }
+
+      if (overflow && ch->c != '\r' && ch->c != '\n' && ch->c != 13 && ch->c != 10 && ch->c != ' ' && ch->size.x > 0 && ch->size.y > 0) {
+        current_line_width = 0;
+        rx = 0;
+        extra_y += options.font_size;
+      }
+
+
     }
 
-    if (ch->c == '\n') {
-      extra_y += 16;
-      rx = x;
+    if (options.depth_test) {
+      glEnable(GL_DEPTH_TEST);
     } else {
-      (rx += (ch->advance_x) >> 6);
-      rx -= ch->bearing.x;
-      rx -= ch->size.x / 2;
+      glDisable(GL_DEPTH_TEST);
     }
+    glBindTexture(GL_TEXTURE_3D, atlas->id);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindImageTexture(0, atlas->id, 0, /*layered=*/GL_TRUE, 0, GL_READ_WRITE,
+                      GL_R32I);
+    glDrawElementsInstanced(GL_TRIANGLES, textlen, GL_UNSIGNED_INT, 0, textlen);
   }
 
-  if (options.depth_test) {
-    glEnable(GL_DEPTH_TEST);
-  } else {
-    glDisable(GL_DEPTH_TEST);
-  }
-  glBindTexture(GL_TEXTURE_3D, atlas->id);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glBindImageTexture(0, atlas->id, 0, /*layered=*/GL_TRUE, 0, GL_READ_WRITE,
-                     GL_R32I);
-  glDrawElementsInstanced(GL_TRIANGLES, textlen, GL_UNSIGNED_INT, 0, textlen);
   glBindVertexArray(0);
 
   return atlas;
