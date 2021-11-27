@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
+add_compile_options(-g -Wall)
 
 project(glfont)
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_BINARY_DIR}/.)
+
 
 
 add_custom_target(

@@ -4,11 +4,15 @@
 
 #ifndef FREETYPE_SRC
 #include <freetype/ftglyph.h>
+#include <freetype/ftimage.h>
+#include <freetype/ftoutln.h>
 #include <freetype2/ft2build.h>
 #include FT_FREETYPE_H
 #elif FREETYPE_SRC
 include<ft2build.h>
 #include <freetype2/freetype/ftglyph.h>
+#include <freetype2/freetype/ftimage.h>
+#include <freetype2/freetype/ftoutln.h>
 #include FT_FREETYPE_H
 #endif
 
@@ -89,6 +93,36 @@ typedef struct GLFONT_COLOR_STRUCT {
   float a;
 } GLFontColor;
 
+typedef enum {
+  GLFONT_GLYPH_MOVE,
+  GLFONT_GLYPH_LINE_TO,
+  GLFONT_GLYPH_CONIC_TO,
+  GLFONT_GLYPH_CONIC_TO_SEQ,
+  GLFONT_GLYPH_CUBIC_TO,
+  GLFONT_GLYPH_CUBIC_TO_SEQ
+} EGlyphPointType;
+
+typedef struct GLFONT_GLYPH_POINT {
+  long int x;
+  long int y;
+  EGlyphPointType type;
+  struct GLFONT_GLYPH_POINT *next;
+} GLFontGlyphPoint;
+
+void glfont_glyph_point_to_string(char *buff, GLFontGlyphPoint *point);
+
+#define GLFONT_GLYPH_CAP 512
+
+typedef struct GLFONT_GLYPH_STRUCT {
+  FT_Matrix matrix;
+  FT_Vector delta;
+  FT_Glyph glyph;
+  GLFontGlyphPoint **points;
+  uint32_t points_len;
+  uint32_t point_index;
+  int pensize;
+} GLFontGlyph;
+
 #define GLFONT_COLOR(r, g, b, a) ((GLFontColor){r, g, b, a})
 
 typedef struct GLFONT_TEXT_OPTIONS_STRUCT {
@@ -103,6 +137,9 @@ typedef struct GLFONT_TEXT_OPTIONS_STRUCT {
   unsigned int char_vert_res;
   unsigned int pixel_size;
 } GLFontTextOptions;
+
+void glfont_load_glyph(GLFontGlyph *glyph, GLFontFamily *family, char c,
+                       GLFontTextOptions options);
 
 unsigned int glfont_text_options_is_equal(GLFontTextOptions a,
                                           GLFontTextOptions b);
@@ -157,4 +194,7 @@ void glfont_load_font_character(GLFontCharacter *character,
                                 GLFontFamily *family, char c, float font_size,
                                 unsigned int horz_res, unsigned int vert_res,
                                 unsigned int pixel_size);
+
+void glfont_glyph_free(GLFontGlyph *glyph);
+void glfont_glyph_point_free(GLFontGlyphPoint *point);
 #endif

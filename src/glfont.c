@@ -13,6 +13,9 @@
 
 #define WRAPS GL_CLAMP_TO_BORDER
 #define FT_FLAGS FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL
+#define DPI_H 96
+#define DPI_V 96
+#define PEN_SIZE 64
 
 #define FIRST_CHAR 32  // start of the range of possible characters we support
 #define NUM_GLYPHS 128 // how many characters we support
@@ -66,8 +69,8 @@ void glfont_load_font_character(GLFontCharacter *character,
                                 unsigned int horz_res, unsigned int vert_res,
                                 unsigned int pixel_size) {
   int f = (int)ceil(font_size);
-  FT_Set_Char_Size(*family->face, 0, ceil(f * OR(pixel_size, 64)), horz_res,
-                   vert_res);
+  FT_Set_Char_Size(*family->face, 0, ceil(f * OR(pixel_size, PEN_SIZE)),
+                   horz_res, vert_res);
 
   FT_Face face = *family->face;
   int errcode = 0;
@@ -161,10 +164,10 @@ GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options) {
 
   int f = (int)ceil(options.font_size);
 
-  unsigned int px = OR(options.pixel_size, 64);
+  unsigned int px = OR(options.pixel_size, PEN_SIZE);
 
-  FT_Set_Char_Size(face, 0, f * px, OR(options.char_horz_res, 96),
-                   OR(options.char_vert_res, 96));
+  FT_Set_Char_Size(face, 0, f * px, OR(options.char_horz_res, DPI_H),
+                   OR(options.char_vert_res, DPI_V));
 
   int imageWidth = 0;
   int imageHeight = 0;
@@ -229,10 +232,11 @@ GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options) {
 
     glBindTexture(GL_TEXTURE_3D, 0);
     GLFontCharacter *character = NEW(GLFontCharacter);
-    glfont_load_font_character(character, family, (char)i, options.font_size,
-                               OR(options.char_horz_res, 96), // horizontal dpi
-                               OR(options.char_vert_res, 96), // vertical dpi
-                               OR(options.pixel_size, 64));
+    glfont_load_font_character(
+        character, family, (char)i, options.font_size,
+        OR(options.char_horz_res, DPI_H), // horizontal dpi
+        OR(options.char_vert_res, DPI_V), // vertical dpi
+        OR(options.pixel_size, PEN_SIZE));
 
     character->extra = imageWidth - (w);
     atlas->chars[(int)i] = character;
@@ -429,8 +433,8 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
       FT_BBox bbox;
       FT_Glyph_Get_CBox(glyphK, FT_GLYPH_BBOX_GRIDFIT, &bbox);
 
-      float width = glyph->metrics.width / OR(options.pixel_size, 64);
-      float height = glyph->metrics.height / OR(options.pixel_size, 64);
+      float width = glyph->metrics.width / OR(options.pixel_size, PEN_SIZE);
+      float height = glyph->metrics.height / OR(options.pixel_size, PEN_SIZE);
 
       int w = ch->size.x * scale;
       int h = ch->size.y * scale;
@@ -595,4 +599,174 @@ glfont_copy_text_measurement(GLTextMeasurement *measurement) {
   m->zero_height = measurement->zero_height;
   m->zero_width = measurement->zero_width;
   return m;
+}
+
+static int moveTo(FT_Vector *to, void *ptr) {
+  GLFontGlyph *glyph = (GLFontGlyph *)ptr;
+  GLFontGlyphPoint *point = NEW(GLFontGlyphPoint);
+  point->type = GLFONT_GLYPH_MOVE;
+  point->x = to->x;
+  point->y = to->y;
+  glyph->point_index += 1;
+  glyph->points = (GLFontGlyphPoint **)realloc(
+      glyph->points, glyph->point_index * sizeof(GLFontGlyphPoint *));
+  glyph->points[glyph->point_index - 1] = point;
+  return 0;
+}
+
+static int lineTo(FT_Vector *to, void *ptr) {
+  GLFontGlyph *glyph = (GLFontGlyph *)ptr;
+  GLFontGlyphPoint *point = NEW(GLFontGlyphPoint);
+  point->type = GLFONT_GLYPH_LINE_TO;
+  point->x = to->x;
+  point->y = to->y;
+
+  glyph->point_index += 1;
+  glyph->points = (GLFontGlyphPoint **)realloc(
+      glyph->points, glyph->point_index * sizeof(GLFontGlyphPoint *));
+  glyph->points[glyph->point_index - 1] = point;
+  return 0;
+}
+
+static int conicTo(FT_Vector *control, FT_Vector *to, void *ptr) {
+  GLFontGlyph *glyph = (GLFontGlyph *)ptr;
+
+  GLFontGlyphPoint *point = NEW(GLFontGlyphPoint);
+  point->type = GLFONT_GLYPH_CONIC_TO;
+  point->x = control->x / glyph->pensize;
+  point->y = -control->y / glyph->pensize;
+
+  GLFontGlyphPoint *point2 = NEW(GLFontGlyphPoint);
+  point2->type = GLFONT_GLYPH_CONIC_TO_SEQ;
+  point2->x = to->x / glyph->pensize;
+  point2->y = -to->y / glyph->pensize;
+  point->next = point2;
+
+  glyph->point_index += 1;
+  glyph->points = (GLFontGlyphPoint **)realloc(
+      glyph->points, glyph->point_index * sizeof(GLFontGlyphPoint *));
+  glyph->points[glyph->point_index - 1] = point;
+
+  return 0;
+}
+
+static int cubicTo(FT_Vector *control1, FT_Vector *control2, FT_Vector *to,
+                   void *ptr) {
+  GLFontGlyph *glyph = (GLFontGlyph *)ptr;
+
+  GLFontGlyphPoint *point = NEW(GLFontGlyphPoint);
+  point->type = GLFONT_GLYPH_CUBIC_TO;
+  point->x = control1->x / glyph->pensize;
+  point->y = -control1->y / glyph->pensize;
+
+  GLFontGlyphPoint *point2 = NEW(GLFontGlyphPoint);
+  point2->type = GLFONT_GLYPH_CUBIC_TO_SEQ;
+  point2->x = control2->x / glyph->pensize;
+  point2->y = -control2->y / glyph->pensize;
+  point->next = point2;
+
+  GLFontGlyphPoint *point3 = NEW(GLFontGlyphPoint);
+  point3->type = GLFONT_GLYPH_CUBIC_TO_SEQ;
+  point3->x = to->x / glyph->pensize;
+  point3->y = -to->y / glyph->pensize;
+  point2->next = point3;
+
+  glyph->point_index += 1;
+  glyph->points = (GLFontGlyphPoint **)realloc(
+      glyph->points, glyph->point_index * sizeof(GLFontGlyphPoint *));
+
+  return 0;
+}
+
+void glfont_load_glyph(GLFontGlyph *glyph, GLFontFamily *family, char c,
+                       GLFontTextOptions options) {
+  GLFontCharacter character = {};
+  int pensize = OR(options.pixel_size, PEN_SIZE);
+  glyph->pensize = pensize;
+  glfont_load_font_character(&character, family, c, options.font_size,
+                             OR(options.char_horz_res, DPI_H),
+                             OR(options.char_vert_res, DPI_V), pensize);
+
+  FT_Glyph glyph1;
+  FT_Get_Glyph(*character.glyph, &glyph1);
+  FT_Matrix matrix;
+
+  /* copy glyph to glyph2 */
+  int error = FT_Glyph_Copy(glyph1, &glyph->glyph);
+  if (error) {
+    printf("Could not copy\n");
+  }
+
+  /* translate "glyph" */
+  glyph->delta.x = -100 * pensize; /* coordinates are in 26.6 pixels */
+  glyph->delta.y = 50 * pensize;
+
+  FT_Glyph_Transform(glyph->glyph, 0, &glyph->delta);
+
+  /* transform glyph2 (horizontal shear) */
+  matrix.xx = 0x10000L;
+  matrix.xy = 0;
+  matrix.yx = 0.12 * 0x10000L;
+  matrix.yy = 0x10000L;
+
+  FT_Outline_Funcs funcs;
+  funcs.move_to = (FT_Outline_MoveTo_Func)&moveTo;
+  funcs.line_to = (FT_Outline_LineTo_Func)&lineTo;
+  funcs.conic_to = (FT_Outline_ConicTo_Func)&conicTo;
+  funcs.cubic_to = (FT_Outline_CubicTo_Func)&cubicTo;
+  funcs.shift = 0;
+  funcs.delta = 0;
+
+  FT_Outline outline = (*character.glyph)->outline;
+  FT_Outline_Decompose(&outline, &funcs, glyph);
+
+  FT_Glyph_Transform(glyph->glyph, &matrix, 0);
+
+  glyph->points_len = glyph->point_index - 1;
+}
+
+void glfont_glyph_free(GLFontGlyph *glyph) {
+  if (glyph->points) {
+    for (uint32_t i = 0; i < glyph->points_len; i++) {
+      glfont_glyph_point_free(glyph->points[i]);
+    }
+  }
+
+  free(glyph);
+}
+
+void glfont_glyph_point_free(GLFontGlyphPoint *point) {
+  if (point->next != 0)
+    glfont_glyph_point_free(point->next);
+  free(point);
+}
+
+void glfont_glyph_point_to_string(char *buff, GLFontGlyphPoint *point) {
+  const char *typename = 0;
+  switch (point->type) {
+  case GLFONT_GLYPH_MOVE:
+    typename = "GLFONT_GLYPH_MOVE";
+    break;
+  case GLFONT_GLYPH_LINE_TO:
+    typename = "GLFONT_GLYPH_LINE_TO";
+    break;
+  case GLFONT_GLYPH_CUBIC_TO:
+    typename = "GLFONT_GLYPH_CUBIC_TO";
+    break;
+  case GLFONT_GLYPH_CONIC_TO:
+    typename = "GLFONT_GLYPH_CONIC_TO";
+    break;
+  case GLFONT_GLYPH_CUBIC_TO_SEQ:
+    typename = "GLFONT_GLYPH_CUBIC_TO_SEQ";
+    break;
+  case GLFONT_GLYPH_CONIC_TO_SEQ:
+    typename = "GLFONT_GLYPH_CONIC_TO_SEQ";
+    break;
+  default:
+    typename = "GLFONT_GLYPH_UNKNOWN";
+    break;
+  }
+  const char *template = "<point type='%s' x=%ld y=%ld/>";
+
+  sprintf(buff, template, typename, point->x, point->y);
 }
