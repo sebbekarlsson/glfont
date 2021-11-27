@@ -30,6 +30,7 @@
 * Create a window for you
 * Create an OpenGL context for you
 * Compile shaders for you
+* Free any memory for you
 
 
 ## Shaders
