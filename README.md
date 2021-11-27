@@ -32,9 +32,23 @@
 * Compile shaders for you
 * Free any memory for you
 
-
 ## Shaders
 > There are some shader's [here](assets/shaders) that are supposed to be put to use
 > when rendering text using this library.  
 > However, as mentioned before: You have to compile the shaders on your own.
 > They just exist here for you to copy-paste them.
+
+## Usage
+```C
+/**
+  The recommended use here is to pass in `0` to the `atlas` argument.
+  This function will then create one for you and return it.
+  Then it's up to you to free it.
+**/
+GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
+                                        float x, float y, float z,
+                                        GLFontTextOptions options, mat4 view,
+                                        mat4 projection, unsigned int program,
+                                        unsigned int dynamic);
+```
+
