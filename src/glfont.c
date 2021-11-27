@@ -470,7 +470,7 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
         current_line_width += ch->size.x;
       }
 
-      unsigned int overflow = options.line_width ? xpos+w  > options.line_width : 0;
+      unsigned int overflow = options.line_width ? (xpos+w + options.letter_spacing)  > options.line_width : 0;
 
       if (ch->c == '\n') {
         rx = x;
