@@ -15,7 +15,6 @@ include<ft2build.h>
 #include <cglm/call.h> /* for library call (this also includes cglm.h) */
 #include <cglm/cglm.h> /* for inline */
 
-
 typedef struct GLRAP_VECTOR2 {
   float x;
   float y;
@@ -77,7 +76,6 @@ typedef struct GL_TEXT_MEASUREMENT_STRUCT {
   int zero_width;
 } GLTextMeasurement;
 
-
 typedef struct GLFONT_ATLAS_OPTIONS_STRUCT {
   uint8_t *family_bytes;
   uint32_t len;
@@ -91,8 +89,7 @@ typedef struct GLFONT_COLOR_STRUCT {
   float a;
 } GLFontColor;
 
-#define GLFONT_COLOR(r, g, b, a)                                               \
-  ((GLFontColor){r, g, b, a})
+#define GLFONT_COLOR(r, g, b, a) ((GLFontColor){r, g, b, a})
 
 typedef struct GLFONT_TEXT_OPTIONS_STRUCT {
   float font_size;
@@ -125,14 +122,14 @@ typedef struct GLFONT_ATLAS_STRUCT {
   uint32_t nr_rendered_chars;
   GLFontTextOptions options;
   char *text;
-  char** text_chunks;
+  char **text_chunks;
   uint32_t text_chunks_len;
 } GLFontAtlas;
 
 void glfont_font_atlas_release_cache(GLFontAtlas *atlas);
 
 void glfont_font_atlas_maybe_release_cache(GLFontAtlas *atlas, const char *text,
-                                        GLFontTextOptions options);
+                                           GLFontTextOptions options);
 
 GLFontAtlas *glfont_init_atlas(GLFontAtlasOptions options);
 GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options);
@@ -147,9 +144,10 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
                                         unsigned int dynamic);
 GLTextMeasurement *glfont_copy_text_measurement(GLTextMeasurement *measurement);
 
-GLTextMeasurement glfont_get_text_measurement(GLFontCharacter** characters, uint32_t len);
+GLTextMeasurement glfont_get_text_measurement(GLFontCharacter **characters,
+                                              uint32_t len);
 
-float glfont_get_text_max_height(GLFontCharacter** characters, uint32_t len);
+float glfont_get_text_max_height(GLFontCharacter **characters, uint32_t len);
 
 GLFontFamily *glfont_init_font_family(uint8_t *bytes, uint32_t len);
 
@@ -157,5 +155,6 @@ void glfont_font_family_free(GLFontFamily *family);
 
 void glfont_load_font_character(GLFontCharacter *character,
                                 GLFontFamily *family, char c, float font_size,
-                                unsigned int horz_res, unsigned int vert_res, unsigned int pixel_size);
+                                unsigned int horz_res, unsigned int vert_res,
+                                unsigned int pixel_size);
 #endif

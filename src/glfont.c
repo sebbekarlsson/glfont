@@ -14,7 +14,10 @@
 #define WRAPS GL_CLAMP_TO_BORDER
 #define FT_FLAGS FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL
 
-#define FIRST_CHAR 32
+#define FIRST_CHAR 32  // start of the range of possible characters we support
+#define NUM_GLYPHS 128 // how many characters we support
+
+// how many characters we render per call (chunk length)
 #define STRING_BUFFER_CAP 256
 
 static const char *getErrorMessage(FT_Error err) {
@@ -58,13 +61,13 @@ void glfont_font_family_free(GLFontFamily *family) {
   free(family);
 }
 
-#define NUM_GLYPHS 128
-
 void glfont_load_font_character(GLFontCharacter *character,
                                 GLFontFamily *family, char c, float font_size,
-                                unsigned int horz_res, unsigned int vert_res, unsigned int pixel_size) {
+                                unsigned int horz_res, unsigned int vert_res,
+                                unsigned int pixel_size) {
   int f = (int)ceil(font_size);
-  FT_Set_Char_Size(*family->face, 0, ceil(f * OR(pixel_size, 64)), horz_res, vert_res);
+  FT_Set_Char_Size(*family->face, 0, ceil(f * OR(pixel_size, 64)), horz_res,
+                   vert_res);
 
   FT_Face face = *family->face;
   int errcode = 0;
@@ -89,17 +92,14 @@ void glfont_load_font_character(GLFontCharacter *character,
   glGenTextures(1, &character->texture);
   glBindTexture(GL_TEXTURE_2D, character->texture);
 
-
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, WRAPS);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, WRAPS);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, WRAPS);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, face->glyph->bitmap.width,
                face->glyph->bitmap.rows, 0, GL_RED, GL_UNSIGNED_BYTE,
                face->glyph->bitmap.buffer);
-
-
 
   character->glyph = &face->glyph;
   character->width = face->glyph->bitmap.width;
@@ -142,7 +142,6 @@ GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options) {
 
   GLFontAtlas *atlas = NEW(GLFontAtlas);
   atlas->family = family;
-  // atlas->chars = NEW_MAP();
 
   GLuint texid = 0;
   glGenTextures(1, &texid);
@@ -150,8 +149,7 @@ GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options) {
 
   glBindTexture(GL_TEXTURE_3D, atlas->id);
   glPixelStorei(GL_PACK_ALIGNMENT, 1);
-  glBindImageTexture(0, atlas->id, 0, /*layered=*/GL_TRUE, 0, GL_READ_WRITE,
-                     GL_R32I);
+  glBindImageTexture(0, atlas->id, 0, GL_TRUE, 0, GL_READ_WRITE, GL_R32I);
   glGenerateMipmap(GL_TEXTURE_3D);
 
   unsigned int nr_chars = 128;
@@ -165,8 +163,8 @@ GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options) {
 
   unsigned int px = OR(options.pixel_size, 64);
 
-  FT_Set_Char_Size(face, 0, f * px, OR(options.char_horz_res, 96), OR(options.char_vert_res, 96));
-  // FT_Set_Pixel_Sizes(face, 0, 64);
+  FT_Set_Char_Size(face, 0, f * px, OR(options.char_horz_res, 96),
+                   OR(options.char_vert_res, 96));
 
   int imageWidth = 0;
   int imageHeight = 0;
@@ -185,8 +183,7 @@ GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options) {
     FT_Get_Glyph(face->glyph, &glyph2);
     FT_Glyph_Get_CBox(glyph2, FT_GLYPH_BBOX_UNSCALED, &bbox);
 
-    int gw = ceil(glyph->metrics.width / px) +
-             glyph->bitmap_left; // face->glyph->bitmap.width;
+    int gw = ceil(glyph->metrics.width / px) + glyph->bitmap_left;
 
     int hh = ceil(glyph->metrics.height / px) + ceil(glyph->bitmap_top / 4);
 
@@ -226,23 +223,22 @@ GLFontAtlas *glfont_generate_font_atlas_3d(GLFontTextOptions options) {
     float bearingX = face->glyph->metrics.horiBearingX / px; // position
     float scalar_x = 1.0f / (float)f;
     glGenerateMipmap(GL_TEXTURE_3D);
-    glTexSubImage3D(GL_TEXTURE_3D, 0, -xx / (px/2), y, i - FIRST_CHAR, w, h, 1.0f,
-                    GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
+    glTexSubImage3D(GL_TEXTURE_3D, 0, -xx / (px / 2), y, i - FIRST_CHAR, w, h,
+                    1.0f, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
     glGenerateMipmap(GL_TEXTURE_3D);
 
     glBindTexture(GL_TEXTURE_3D, 0);
     GLFontCharacter *character = NEW(GLFontCharacter);
-    glfont_load_font_character(
-        character, family, (char)i, options.font_size,
-        OR(options.char_horz_res, 96),
-        OR(options.char_vert_res, 96), OR(options.pixel_size, 64));
+    glfont_load_font_character(character, family, (char)i, options.font_size,
+                               OR(options.char_horz_res, 96), // horizontal dpi
+                               OR(options.char_vert_res, 96), // vertical dpi
+                               OR(options.pixel_size, 64));
 
     character->extra = imageWidth - (w);
     atlas->chars[(int)i] = character;
 
     glBindTexture(GL_TEXTURE_3D, atlas->id);
-    glBindImageTexture(0, atlas->id, 0, /*layered=*/GL_TRUE, 0, GL_READ_WRITE,
-                       GL_R32I);
+    glBindImageTexture(0, atlas->id, 0, GL_TRUE, 0, GL_READ_WRITE, GL_R32I);
   }
 
   glBindTexture(GL_TEXTURE_3D, 0);
@@ -277,11 +273,61 @@ unsigned int glfont_text_options_is_equal(GLFontTextOptions a,
 }
 
 void glfont_atlas_maybe_release_cache(GLFontAtlas *atlas, const char *text,
-                                        GLFontTextOptions options) {
+                                      GLFontTextOptions options) {
   if ((text && atlas->text && strcmp(text, atlas->text) != 0) ||
       !glfont_text_options_is_equal(atlas->options, options)) {
     return glw_font_atlas_release_cache(atlas);
   }
+}
+
+static void glfont_buffer_quad(GLFontAtlas *atlas, unsigned int program,
+                               float width, float height, GLFontColor color,
+                               mat4 view, mat4 projection,
+                               uint32_t array_offset, uint32_t element_offset) {
+
+  glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, *view);
+  glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1, GL_FALSE,
+                     *projection);
+
+  float w = width;
+  float h = height;
+  float r = color.r;
+  float g = color.g;
+  float b = color.b;
+  float a = color.a;
+  int K = 0;
+
+  float vertices[] = {0 + 0.0f, 0 + 0.0f, 0.0f, r, g, b, a, 0.0f, 0.0f,
+                      0 + w,    0 + 0.0f, 0.0f, r, g, b, a, 1.0f, 0.0f,
+                      0 + w,    0 + h,    0.0f, r, g, b, a, 1.0f, 1.0f,
+                      0 + 0.0f, 0 + h,    0.0f, r, g, b, a, 0.0f, 1.0f};
+
+  unsigned int indices[] = {0 + K, 1 + K, 3 + K, 1 + K, 2 + K, 3 + K};
+
+  glUniform4f(glGetUniformLocation(program, "color"), color.r, color.g, color.b,
+              color.a);
+
+  glBindBuffer(GL_ARRAY_BUFFER, atlas->VBO);
+  glBufferSubData(GL_ARRAY_BUFFER, array_offset, sizeof(vertices), vertices);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas->EBO);
+  glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, element_offset, sizeof(indices),
+                  indices);
+
+  // x, y, z
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
+                        (void *)0 + array_offset);
+  glEnableVertexAttribArray(0);
+
+  // r, g, b, a
+  glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
+                        (void *)(array_offset + (3 * sizeof(float))));
+  glEnableVertexAttribArray(1);
+
+  // texcoords
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
+                        (void *)(array_offset + (7 * sizeof(float))));
+  glEnableVertexAttribArray(2);
 }
 
 GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
@@ -304,7 +350,8 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
   if (!atlas->initialized) {
     atlas->nr_rendered_chars = strlen(text);
 
-    atlas->text_chunks = glfont_str_chunk(text, STRING_BUFFER_CAP, &atlas->text_chunks_len);
+    atlas->text_chunks =
+        glfont_str_chunk(text, STRING_BUFFER_CAP, &atlas->text_chunks_len);
 
     glGenBuffers(1, &atlas->VBO);
     glGenBuffers(1, &atlas->EBO);
@@ -313,36 +360,38 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
 
   uint32_t nr_chunks = atlas->text_chunks_len;
 
-
-  float xi = 0;
-  float yi = 0;
-
   uint32_t current_line_width = 0;
+
+  // TODO: make this work to avoid chunks.
+  //
+  // glBindBuffer(GL_ARRAY_BUFFER, atlas->VBO);
+  // kGLuint ssbo;
+  // glGenBuffers(1, &ssbo);
+  // glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+  // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo);
+  // glBufferData(GL_SHADER_STORAGE_BUFFER, strlen(text) * (sizeof(float) * 3),
+  // 0, GL_STATIC_DRAW); //sizeof(data) only works for statically sized C/C++
+  // arrays.
+
+  uint32_t buffered_chunks = 0;
 
   for (uint32_t ci = 0; ci < nr_chunks; ci++) {
 
-    char* chunk = atlas->text_chunks[ci];
-    uint32_t textlen = strlen(chunk);//atlas->nr_rendered_chars;
-
-    //if (textlen > 256) {
-    //  printf("(glfont) Error: glfont_draw_text_instanced can only draw 256 characters at once.\n%d characters was given.\n", textlen);
-    //  return atlas;
-    //}
+    char *chunk = atlas->text_chunks[ci];
+    uint32_t textlen = strlen(chunk); // atlas->nr_rendered_chars;
 
     /** Allocate buffer memory */
 
     glBindBuffer(GL_ARRAY_BUFFER, atlas->VBO);
     glBufferData(GL_ARRAY_BUFFER, 9 * 4 * textlen * sizeof(float), 0,
-                GL_STATIC_DRAW);
+                 GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas->EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * textlen * sizeof(float), 0,
-                GL_STATIC_DRAW);
+                 GL_STATIC_DRAW);
 
     uint32_t array_offset = 0;
     uint32_t element_offset = 0;
     glBindTexture(GL_TEXTURE_3D, atlas->id);
-
-    int buffered = 0;
 
     int imageWidth = 0;
     int maxAscent = 0;
@@ -359,16 +408,14 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
     char c = 0;
     float xpos = 0;
     float ypos = 0;
+    uint32_t buffered_characters = 0;
     for (i = 0; i < textlen; i++) {
       char c = chunk[i];
 
-
       if (c == '\n') {
         extra_y += options.font_size;
-//        current_line_width = 0;
         rx = 0;
       }
-
 
       GLFontCharacter *ch = (GLFontCharacter *)atlas->chars[(int)c];
       if (ch == 0 && i < textlen) {
@@ -382,16 +429,14 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
       FT_BBox bbox;
       FT_Glyph_Get_CBox(glyphK, FT_GLYPH_BBOX_GRIDFIT, &bbox);
 
-      float width = glyph->metrics.width / OR(options.pixel_size, 64);   // size
-      float height = glyph->metrics.height / OR(options.pixel_size, 64); // size
-
+      float width = glyph->metrics.width / OR(options.pixel_size, 64);
+      float height = glyph->metrics.height / OR(options.pixel_size, 64);
 
       int w = ch->size.x * scale;
       int h = ch->size.y * scale;
 
-      ypos =  extra_y;
+      ypos = extra_y;
       xpos = (rx + ch->bearing.x);
-
 
       if (ch->c != '\r' && ch->c != '\n') {
 
@@ -408,86 +453,59 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
           if (width <= 0 || height <= 0 || program == 0)
             continue;
 
-          glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE,
-                            *view);
-          glUniformMatrix4fv(glGetUniformLocation(program, "projection"), 1,
-                            GL_FALSE, *projection);
+          glfont_buffer_quad(atlas, program, width, height, color, view,
+                             projection, array_offset, element_offset);
 
-          float w = width;
-          float h = height;
-          float r = color.r;
-          float g = color.g;
-          float b = color.b;
-          float a = color.a;
-          int K = 0;
+          char buff[256];
+          sprintf(buff, "offsets[%d]", (int)i);
+          glUniform3f(glGetUniformLocation(program, buff), ceil(xpos),
+                      ceil(ypos), 0);
 
-          float vertices[] = {0 + 0.0f, 0 + 0.0f, 0.0f, r, g, b, a, 0.0f, 0.0f,
-                              0 + w,    0 + 0.0f, 0.0f, r, g, b, a, 1.0f, 0.0f,
-                              0 + w,    0 + h,    0.0f, r, g, b, a, 1.0f, 1.0f,
-                              0 + 0.0f, 0 + h,    0.0f, r, g, b, a, 0.0f, 1.0f};
+          char buff2[256];
+          sprintf(buff2, "toff[%d]", (int)i);
+          glUniform3f(glGetUniformLocation(program, buff2), 0, 0, stack_index);
 
-          unsigned int indices[] = {0 + K, 1 + K, 3 + K, 1 + K, 2 + K, 3 + K};
+          // TODO: make this work to avoid chunks
+          //
+          // glUniform1i(glGetUniformLocation(program, "myId"), (int)i);
+          // glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+          // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo);
+          // float off[] = { (float)ceil(xpos), (float)ceil(ypos), 0.0f };
+          // glBufferSubData(GL_SHADER_STORAGE_BUFFER, vec3_offset_bytes,
+          // sizeof(float)*3, &off);
 
-          glUniform4f(glGetUniformLocation(program, "color"), color.r, color.g,
-                      color.b, color.a);
+          array_offset += (9 * 4 * sizeof(float));
+          element_offset += (6 * sizeof(float));
+          current_line_width += ch->size.x;
 
-          glBindBuffer(GL_ARRAY_BUFFER, atlas->VBO);
-          glBufferSubData(GL_ARRAY_BUFFER, array_offset, sizeof(vertices),
-                          vertices);
-
-          glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas->EBO);
-          glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, element_offset,
-                          sizeof(indices), indices);
-
-          // x, y, z
-          glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
-                                (void *)0 + array_offset);
-          glEnableVertexAttribArray(0);
-
-          // r, g, b, a
-          glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
-                                (void *)(array_offset + (3 * sizeof(float))));
-          glEnableVertexAttribArray(1);
-
-          // texcoords
-          glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float),
-                                (void *)(array_offset + (7 * sizeof(float))));
-          glEnableVertexAttribArray(2);
+          buffered_characters += 1;
         }
-
-        buffered += 1;
-
-        char buff[256];
-        sprintf(buff, "offsets[%d]", (int)i);
-        glUniform3f(glGetUniformLocation(program, buff), ceil(xpos), ceil(ypos), 0);
-
-        char buff2[256];
-        sprintf(buff2, "toff[%d]", (int)i);
-        glUniform3f(glGetUniformLocation(program, buff2), 0, 0, stack_index);
-
-        array_offset += (9 * 4 * sizeof(float));
-        element_offset += (6 * sizeof(float));
-        current_line_width += ch->size.x;
       }
 
-      unsigned int overflow = options.line_width ? (xpos+w + options.letter_spacing)  > options.line_width : 0;
+      // is the text overflowing?
+      unsigned int overflow =
+          options.line_width
+              ? (xpos + w + options.letter_spacing) > options.line_width
+              : 0;
 
       if (ch->c == '\n') {
         rx = x;
       } else {
-        (rx += (ch->advance_x) >> 6);
-        //rx -= ch->bearing.x;
-        rx -= ch->size.x / 2;
-        rx += options.letter_spacing;
+        (rx += (ch->advance_x) >>
+               6); // the amount the character wants to move horizontally
+        rx -= ch->size.x /
+              2; // remove half of the size from the x position, because of how
+                 // the atlas works (haven't figured out exactly why yet)
+        rx += options.letter_spacing; // add user definied letter spacing
       }
 
-      if (overflow && ch->c != '\r' && ch->c != '\n' && ch->c != 13 && ch->c != 10 && ch->c != ' ' && ch->size.x > 0 && ch->size.y > 0) {
+      if (overflow && ch->c != '\r' && ch->c != '\n' && ch->c != 13 &&
+          ch->c != 10 && ch->c != ' ' && ch->size.x > 0 && ch->size.y > 0) {
         current_line_width = 0;
         rx = 0;
-        extra_y += options.font_size;
+        extra_y += options.font_size; // text is overflowing, so let's move the
+                                      // cursor down
       }
-
-
     }
 
     if (options.depth_test) {
@@ -495,14 +513,19 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
     } else {
       glDisable(GL_DEPTH_TEST);
     }
+    // TODO: make this work to avoid chunks
+    // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo);
     glBindTexture(GL_TEXTURE_3D, atlas->id);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindImageTexture(0, atlas->id, 0, /*layered=*/GL_TRUE, 0, GL_READ_WRITE,
-                      GL_R32I);
+                       GL_R32I);
     glDrawElementsInstanced(GL_TRIANGLES, textlen, GL_UNSIGNED_INT, 0, textlen);
+    // TODO: make this work to avoid chunks
+    // glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // unbind
+    buffered_chunks += 1;
   }
 
   glBindVertexArray(0);
@@ -510,11 +533,11 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
   return atlas;
 }
 
-float glfont_get_text_max_height(GLFontCharacter** characters, uint32_t len) {
+float glfont_get_text_max_height(GLFontCharacter **characters, uint32_t len) {
 
   float h = 0;
   for (uint32_t i = 0; i < len; i++) {
-    void* ptr = characters[i];
+    void *ptr = characters[i];
     GLFontCharacter *character = (GLFontCharacter *)ptr;
 
     if (character->height > h) {
@@ -525,7 +548,8 @@ float glfont_get_text_max_height(GLFontCharacter** characters, uint32_t len) {
   return h;
 }
 
-GLTextMeasurement glfont_get_text_measurement(GLFontCharacter** characters, uint32_t len) {
+GLTextMeasurement glfont_get_text_measurement(GLFontCharacter **characters,
+                                              uint32_t len) {
   float max_w = 0;
   float max_h = glfont_get_text_max_height(characters, len);
   float h = max_h;
@@ -534,35 +558,36 @@ GLTextMeasurement glfont_get_text_measurement(GLFontCharacter** characters, uint
   int zero_width = 0;
 
   for (uint32_t i = 0; i < len; i++) {
-    void* ptr = characters[i];
-      GLFontCharacter *character = (GLFontCharacter *)ptr;
+    void *ptr = characters[i];
+    GLFontCharacter *character = (GLFontCharacter *)ptr;
 
-      if (character->zero_height > zero_height) {
-        zero_height = character->zero_height;
+    if (character->zero_height > zero_height) {
+      zero_height = character->zero_height;
+    }
+
+    if (character->zero_width > zero_width) {
+      zero_width = character->zero_width;
+    }
+
+    if (character->c == '\r' || character->c == '\n') {
+      h += max_h;
+
+      if (line_w > max_w) {
+        max_w = line_w;
       }
 
-      if (character->zero_width > zero_width) {
-        zero_width = character->zero_width;
-      }
-
-      if (character->c == '\r' || character->c == '\n') {
-        h += max_h;
-
-        if (line_w > max_w) {
-          max_w = line_w;
-        }
-
-        line_w = 0;
-      } else {
-        line_w += character->width;
-      }
-}
+      line_w = 0;
+    } else {
+      line_w += character->width;
+    }
+  }
 
   return (GLTextMeasurement){
       max_w == 0 ? (line_w) : max_w, h, max_h, max_w, zero_height, zero_width};
 }
 
-GLTextMeasurement *glfont_copy_text_measurement(GLTextMeasurement *measurement) {
+GLTextMeasurement *
+glfont_copy_text_measurement(GLTextMeasurement *measurement) {
   GLTextMeasurement *m = NEW(GLTextMeasurement);
   m->width = measurement->width;
   m->height = measurement->height;
