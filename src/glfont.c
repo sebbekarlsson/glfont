@@ -478,6 +478,7 @@ GLFontAtlas *glfont_draw_text_instanced(GLFontAtlas *atlas, const char *text,
         (rx += (ch->advance_x) >> 6);
         //rx -= ch->bearing.x;
         rx -= ch->size.x / 2;
+        rx += options.letter_spacing;
       }
 
       if (overflow && ch->c != '\r' && ch->c != '\n' && ch->c != 13 && ch->c != 10 && ch->c != ' ' && ch->size.x > 0 && ch->size.y > 0) {
