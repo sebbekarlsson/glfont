@@ -301,10 +301,10 @@ static void glfont_buffer_quad(GLFontAtlas *atlas, unsigned int program,
   float a = color.a;
   int K = 0;
 
-  float vertices[] = {0 + 0.0f, 0 + 0.0f, 0.0f, r, g, b, a, 0.0f, 0.0f,
-                      0 + w,    0 + 0.0f, 0.0f, r, g, b, a, 1.0f, 0.0f,
-                      0 + w,    0 + h,    0.0f, r, g, b, a, 1.0f, 1.0f,
-                      0 + 0.0f, 0 + h,    0.0f, r, g, b, a, 0.0f, 1.0f};
+  float vertices[] = {0 + 0.0f, 0 + h, 0.0f, r, g, b, a, 0.0f, 0.0f,
+                      0 + w,    0 + h, 0.0f, r, g, b, a, 1.0f, 0.0f,
+                      0 + w,    0 + 0,    0.0f, r, g, b, a, 1.0f, 1.0f,
+                      0 + 0.0f, 0 + 0,    0.0f, r, g, b, a, 0.0f, 1.0f};
 
   unsigned int indices[] = {0 + K, 1 + K, 3 + K, 1 + K, 2 + K, 3 + K};
 

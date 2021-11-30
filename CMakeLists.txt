@@ -22,6 +22,9 @@ file(GLOB glfont_sources ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
 
 add_executable(glfont_e ${glfont_sources})
 
+# just for debugging purposes
+target_link_libraries(glfont_e PRIVATE glfw)
+
 
 
 list(FILTER glfont_ources EXCLUDE REGEX "main.c")
